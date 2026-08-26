@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agent Village — Oakhaven</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/css/village.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏘️</text></svg>"
+    />
+  </head>
+  <body>
+    <!-- ================= HUD ================= -->
+    <header class="hud" id="hud">
+      <div class="hud__row">
+        <div class="hud__brand">
+          <span class="hud__crest" aria-hidden="true">🏘️</span>
+          <div>
+            <h1 class="hud__title">OAKHAVEN</h1>
+            <p class="hud__subtitle">Autonomous POD Village</p>
+          </div>
+        </div>
+
+        <!-- Treasury: the combined take, with a per-channel ledger beneath -->
+        <div class="treasury" id="treasury">
+          <button
+            class="treasury__main"
+            id="treasury-toggle"
+            type="button"
+            aria-expanded="false"
+            aria-controls="ledger"
+            title="Click for the channel breakdown"
+          >
+            <span class="treasury__coin" aria-hidden="true">💰</span>
+            <span class="treasury__figures">
+              <span class="treasury__label">
+                Treasury · <span id="treasury-month">this month</span>
+              </span>
+              <span class="treasury__value">
+                <span id="treasury-amount">$0.00</span>
+                <span class="treasury__caret" aria-hidden="true">▾</span>
+              </span>
+              <span class="treasury__channels" id="treasury-sparks" aria-hidden="true"></span>
+            </span>
+          </button>
+
+          <div class="treasury__meta">
+            <span class="chip" id="chip-mode" title="Publishing mode">DRY&nbsp;RUN</span>
+            <span class="chip chip--muted" id="chip-published" title="Listings published">📦 0</span>
+            <span class="chip chip--muted" id="chip-shorts" title="Shorts published">🎬 0</span>
+            <span class="chip chip--muted" id="chip-pending" title="Awaiting approval">⏳ 0</span>
+            <span class="chip" id="chip-link" title="Live connection">◌ connecting</span>
+          </div>
+
+          <!-- The ledger, styled as a folded sheet pinned under the counter -->
+          <div class="ledger" id="ledger" hidden>
+            <div class="ledger__head">
+              <span>Channel</span>
+              <span>This month</span>
+              <span>Lifetime</span>
+            </div>
+            <ul class="ledger__rows" id="ledger-rows"></ul>
+            <p class="ledger__note" id="ledger-note"></p>
+          </div>
+        </div>
+
+        <div class="hud__actions">
+          <button class="btn btn--primary" id="btn-run" type="button">⚙️ Run Village</button>
+          <button class="btn" id="btn-follow" type="button" title="Follow the working villager">
+            🎯 Follow: <span id="follow-state">on</span>
+          </button>
+          <button class="btn" id="btn-mute" type="button" title="Toggle retro sound">🔊</button>
+        </div>
+      </div>
+
+      <!-- Roster -->
+      <ul class="roster" id="roster" aria-label="Villagers"></ul>
+    </header>
+
+    <!-- ================= STAGE ================= -->
+    <main class="stage">
+      <div class="stage__frame">
+        <canvas id="village" width="960" height="600" aria-label="The village of Oakhaven"></canvas>
+
+        <!-- Floating name tags live in the DOM so text stays crisp -->
+        <div class="nametags" id="nametags" aria-hidden="true"></div>
+
+        <div class="stage__hint" id="stage-hint">
+          Click a villager or a building to talk · drag to pan · scroll to zoom
+        </div>
+      </div>
+
+      <!-- Activity rail -->
+      <aside class="rail" id="rail">
+        <div class="tabs" role="tablist" aria-label="Sidebar sections">
+          <button
+            class="tab is-selected"
+            id="tab-chronicle"
+            role="tab"
+            type="button"
+            aria-selected="true"
+            aria-controls="panel-chronicle"
+            data-panel="chronicle"
+          >
+            📜 Chronicle
+          </button>
+          <button
+            class="tab"
+            id="tab-cinema"
+            role="tab"
+            type="button"
+            aria-selected="false"
+            aria-controls="panel-cinema"
+            data-panel="cinema"
+          >
+            🎭 Bard's Cinema
+            <span class="tab__badge" id="tab-cinema-count" hidden>0</span>
+          </button>
+          <button
+            class="tab"
+            id="tab-deals"
+            role="tab"
+            type="button"
+            aria-selected="false"
+            aria-controls="panel-deals"
+            data-panel="deals"
+          >
+            🛒 Scout's Deals
+            <span class="tab__badge" id="tab-deals-count" hidden>0</span>
+          </button>
+        </div>
+
+        <!-- Chronicle: the log, then listings and the fulfilment queue -->
+        <section
+          class="panel is-active"
+          id="panel-chronicle"
+          role="tabpanel"
+          aria-labelledby="tab-chronicle"
+        >
+          <header class="rail__head">
+            <h2>📜 Village Chronicle</h2>
+            <button class="rail__clear" id="btn-clear-log" type="button">clear</button>
+          </header>
+          <ol class="rail__log" id="log"></ol>
+
+          <header class="rail__head rail__head--sub">
+            <h2>🧾 Listings &amp; Fulfilment</h2>
+            <span class="rail__count" id="listings-count">0</span>
+          </header>
+          <ol class="rail__listings" id="listings"></ol>
+        </section>
+
+        <!-- Cinema: the Bard's Shorts, newest first -->
+        <section
+          class="panel"
+          id="panel-cinema"
+          role="tabpanel"
+          aria-labelledby="tab-cinema"
+          hidden
+        >
+          <header class="rail__head">
+            <h2>🎭 Bard's Cinema</h2>
+            <button class="rail__clear" id="btn-new-short" type="button">+ new</button>
+          </header>
+          <div class="cinema__stats" id="cinema-stats"></div>
+          <ol class="rail__shorts" id="shorts"></ol>
+        </section>
+
+        <!-- Deals: the Scout's affiliate picks, newest first -->
+        <section
+          class="panel"
+          id="panel-deals"
+          role="tabpanel"
+          aria-labelledby="tab-deals"
+          hidden
+        >
+          <header class="rail__head">
+            <h2>🛒 Scout's Deals</h2>
+            <button class="rail__clear" id="btn-new-deal" type="button">+ scout</button>
+          </header>
+          <div class="deals__stats" id="deals-stats"></div>
+          <ol class="rail__deals" id="deals"></ol>
+        </section>
+      </aside>
+    </main>
+
+    <!-- ================= DIALOGUE ================= -->
+    <div class="dialogue-backdrop" id="dialogue-backdrop" hidden>
+      <section
+        class="dialogue"
+        id="dialogue"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialogue-name"
+      >
+        <button class="dialogue__close" id="dialogue-close" type="button" aria-label="Close">
+          ✕
+        </button>
+
+        <div class="dialogue__top">
+          <div class="portrait" id="dialogue-portrait" aria-hidden="true">
+            <canvas id="portrait-canvas" width="64" height="64"></canvas>
+          </div>
+          <div class="dialogue__ident">
+            <h2 class="dialogue__name" id="dialogue-name">—</h2>
+            <p class="dialogue__title" id="dialogue-title">—</p>
+            <p class="dialogue__status" id="dialogue-status">
+              <span class="dot" id="dialogue-dot"></span><span id="dialogue-state">idle</span>
+            </p>
+          </div>
+        </div>
+
+        <div class="dialogue__body">
+          <p class="dialogue__label">Current task</p>
+          <p class="dialogue__text" id="dialogue-text"></p>
+        </div>
+
+        <div class="dialogue__output" id="dialogue-output" hidden>
+          <p class="dialogue__label">Last output</p>
+          <div class="preview" id="dialogue-preview"></div>
+        </div>
+
+        <div class="dialogue__actions" id="dialogue-actions"></div>
+        <p class="dialogue__footer" id="dialogue-footer">▼ click anywhere to continue</p>
+      </section>
+    </div>
+
+    <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+    <script src="/static/js/dialogue.js"></script>
+    <script src="/static/js/hud.js"></script>
+    <script src="/static/js/village.js"></script>
+  </body>
+</html>

@@ -1,0 +1,1723 @@
+/* ==========================================================================
+   Oakhaven — cozy 16-bit village dashboard
+
+   Two rules govern everything here:
+
+   1. NO SMOOTH GRADIENTS. Every surface is a pixel texture built from
+      `repeating-linear-gradient` with HARD colour stops (`0 2px, transparent
+      2px 4px`), which renders as crisp alternating pixels rather than a blend.
+      Layering two or three at different angles gives woven cloth, wood grain,
+      coursed stone and parchment fibre.
+   2. WARM AND EARTHEN. The whole palette is oak, clay, brass and candlelight.
+      Even the shadows carry red; nothing is neutral grey and nothing is cold.
+   ========================================================================== */
+
+:root {
+  /* ---- night, but a warm one ---------------------------------------- */
+  --night: #1a1209;
+  --night-2: #241a0f;
+  --bark: #2e2114;
+  --bark-2: #3b2a19;
+  --bark-3: #4a3520;
+  --edge: #140d06;
+  --line: #5c4426;
+
+  /* ---- parchment and candlelight ------------------------------------ */
+  --parchment: #f0e0bc;
+  --parchment-2: #e2ceA0;
+  --parchment-dim: #b8a179;
+  --brass: #e0a53f;
+  --brass-hi: #f7cf76;
+  --brass-dim: #9c6d24;
+  --ember: #e8763a;
+
+  /* ---- accents, all warmed ------------------------------------------ */
+  --moss: #7ea34a;
+  --moss-deep: #4a6b2c;
+  --sky: #6fa8b8;
+  --blood: #c8434f;
+  --plum: #9a6fa8;
+
+  --pixel-font: "Press Start 2P", ui-monospace, monospace;
+  --read-font: "VT323", ui-monospace, "Courier New", monospace;
+
+  /* ---- reusable pixel textures ---------------------------------------
+     Each is a stack of hard-stop repeating gradients. No colour is ever
+     interpolated, so every one of these is genuinely pixelated. */
+
+  --tex-parchment:
+    repeating-linear-gradient(0deg, rgba(122, 86, 44, 0.10) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(122, 86, 44, 0.07) 0 1px, transparent 1px 4px),
+    repeating-linear-gradient(45deg, rgba(160, 118, 62, 0.06) 0 2px, transparent 2px 6px),
+    repeating-linear-gradient(135deg, rgba(90, 62, 30, 0.05) 0 2px, transparent 2px 8px);
+
+  --tex-wood:
+    repeating-linear-gradient(90deg, rgba(20, 13, 6, 0.30) 0 1px, transparent 1px 13px),
+    repeating-linear-gradient(90deg, rgba(20, 13, 6, 0.16) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(0deg, rgba(255, 214, 150, 0.05) 0 1px, transparent 1px 3px);
+
+  --tex-plank:
+    repeating-linear-gradient(0deg, rgba(20, 13, 6, 0.34) 0 2px, transparent 2px 16px),
+    repeating-linear-gradient(90deg, rgba(255, 214, 150, 0.045) 0 1px, transparent 1px 4px);
+
+  --tex-stone:
+    repeating-linear-gradient(0deg, rgba(20, 13, 6, 0.26) 0 1px, transparent 1px 9px),
+    repeating-linear-gradient(90deg, rgba(20, 13, 6, 0.20) 0 1px, transparent 1px 15px),
+    repeating-linear-gradient(0deg, rgba(240, 224, 188, 0.05) 0 1px, transparent 1px 4px);
+
+  --tex-cloth:
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.16) 0 1px, transparent 1px 2px),
+    repeating-linear-gradient(90deg, rgba(255, 214, 150, 0.05) 0 1px, transparent 1px 2px);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  color: var(--parchment);
+  font-family: var(--read-font);
+  font-size: 19px;
+  overflow: hidden;
+  image-rendering: pixelated;
+  -webkit-font-smoothing: none;
+
+  /* Dark oak boards under the whole page. */
+  background-color: var(--night);
+  background-image: var(--tex-plank);
+}
+
+button {
+  font-family: var(--pixel-font);
+  cursor: pointer;
+}
+
+/* A chunky stepped frame, the way a 16-bit game window is bordered. */
+.frame-3 {
+  box-shadow:
+    0 0 0 2px var(--edge),
+    0 0 0 4px var(--bark-3),
+    0 0 0 6px var(--edge);
+}
+
+/* ==========================================================================
+   HUD
+   ========================================================================== */
+
+.hud {
+  position: relative;
+  z-index: 20;
+  padding: 10px 14px 8px;
+  border-bottom: 4px solid var(--edge);
+  background-color: var(--bark);
+  background-image: var(--tex-wood);
+  box-shadow: 0 4px 0 rgba(0, 0, 0, 0.55);
+}
+
+/* A brass nail in each corner of the HUD board. */
+.hud::before,
+.hud::after {
+  content: "";
+  position: absolute;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  background: var(--brass-dim);
+  box-shadow: 0 0 0 1px var(--edge), inset 1px 1px 0 var(--brass-hi);
+}
+.hud::before {
+  left: 6px;
+}
+.hud::after {
+  right: 6px;
+}
+
+.hud__row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hud__brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 200px;
+}
+
+.hud__crest {
+  font-size: 30px;
+  filter: drop-shadow(0 2px 0 var(--edge));
+}
+
+.hud__title {
+  margin: 0;
+  font-family: var(--pixel-font);
+  font-size: 15px;
+  color: var(--brass);
+  letter-spacing: 2px;
+  text-shadow: 2px 2px 0 var(--edge), 3px 3px 0 rgba(0, 0, 0, 0.4);
+}
+
+.hud__subtitle {
+  margin: 3px 0 0;
+  font-size: 15px;
+  color: var(--parchment-dim);
+}
+
+/* ---- treasury: a carved wooden ledger board ---- */
+.treasury {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 340px;
+  padding: 8px 12px;
+  border: 3px solid var(--edge);
+  background-color: var(--bark-2);
+  background-image: var(--tex-wood);
+  box-shadow:
+    inset 0 0 0 2px var(--bark-3),
+    inset 0 2px 0 rgba(255, 214, 150, 0.08),
+    0 3px 0 var(--edge);
+}
+
+/* The counter is a button now — it opens the ledger — but must not look
+   like one until you hover it. */
+.treasury__main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 2px 2px;
+  font-family: var(--read-font);
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 2px solid transparent;
+  cursor: pointer;
+}
+
+.treasury__main:hover,
+.treasury__main.is-open {
+  border-color: var(--brass-dim);
+  background-color: rgba(224, 165, 63, 0.08);
+}
+
+.treasury__figures {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.treasury__caret {
+  font-size: 13px;
+  color: var(--brass-dim);
+  transition: none;
+}
+
+.treasury__main.is-open .treasury__caret {
+  transform: scaleY(-1);
+  display: inline-block;
+}
+
+/* The icon+amount strip under the total: the split at a glance. */
+.treasury__channels {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+  flex-wrap: wrap;
+}
+
+.spark {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 14px;
+  color: var(--parchment-dim);
+  white-space: nowrap;
+}
+
+.spark span {
+  color: var(--parchment);
+}
+
+.treasury__coin {
+  font-size: 26px;
+  animation: coin-bob 2.4s steps(4) infinite;
+}
+
+/* Stepped, not eased — a smooth bob reads as CSS, not as sprite animation. */
+@keyframes coin-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-4px);
+  }
+}
+
+.treasury__label {
+  margin: 0;
+  font-size: 14px;
+  color: var(--parchment-dim);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.treasury__value {
+  margin: 2px 0 0;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--pixel-font);
+  font-size: 14px;
+  color: var(--brass-hi);
+  text-shadow: 2px 2px 0 var(--edge);
+}
+
+.treasury__gross {
+  font-family: var(--read-font);
+  font-size: 15px;
+  color: var(--parchment-dim);
+  text-shadow: none;
+}
+
+.treasury__meta {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  flex-wrap: wrap;
+}
+
+/* ---- chips: little enamelled tags ---- */
+.chip {
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  padding: 5px 7px;
+  letter-spacing: 1px;
+  white-space: nowrap;
+  color: var(--edge);
+  background-color: var(--brass);
+  background-image: var(--tex-cloth);
+  border: 2px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.28), 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+
+.chip--muted {
+  color: var(--parchment);
+  background-color: var(--bark-3);
+}
+
+.chip--live {
+  color: #10240a;
+  background-color: var(--moss);
+}
+
+.chip--down {
+  color: #2a0206;
+  background-color: var(--blood);
+}
+
+/* ---- buttons: pressed-in oak keys ---- */
+.hud__actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn {
+  font-size: 9px;
+  padding: 9px 11px;
+  color: var(--parchment);
+  background-color: var(--bark-3);
+  background-image: var(--tex-wood);
+  border: 3px solid var(--edge);
+  box-shadow:
+    inset 0 2px 0 rgba(255, 214, 150, 0.16),
+    inset 0 -2px 0 rgba(0, 0, 0, 0.34),
+    0 4px 0 var(--edge);
+  transition: none;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: #5b4126;
+}
+
+/* Steps down onto its own shadow, like a physical key. */
+.btn:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: inset 0 2px 0 rgba(0, 0, 0, 0.3);
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn--primary {
+  color: #2a1a06;
+  background-color: var(--brass);
+  background-image: var(--tex-cloth);
+}
+
+.btn--primary:hover:not(:disabled) {
+  background-color: var(--brass-hi);
+}
+
+.btn--danger {
+  color: #fbe6e8;
+  background-color: #9c3038;
+}
+
+/* ---- roster: carved name plaques ---- */
+.roster {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0 0 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.villager-badge {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 172px;
+  padding: 6px 9px 6px 6px;
+  overflow: hidden;
+  cursor: pointer;
+  background-color: var(--bark-2);
+  background-image: var(--tex-plank);
+  border: 2px solid var(--edge);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 214, 150, 0.12),
+    0 3px 0 var(--edge);
+}
+
+.villager-badge:hover {
+  background-color: #4d381f;
+  transform: translateY(-2px);
+}
+
+.villager-badge.is-active {
+  border-color: var(--brass);
+  box-shadow:
+    inset 0 0 0 1px var(--brass-dim),
+    0 3px 0 var(--edge),
+    0 0 10px rgba(224, 165, 63, 0.28);
+}
+
+.villager-badge__avatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  font-size: 17px;
+  border: 2px solid var(--edge);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  /* Stone niche behind the portrait. */
+  background-color: var(--bark);
+  background-image: var(--tex-stone);
+}
+
+.villager-badge__body {
+  min-width: 0;
+  flex: 1;
+}
+
+.villager-badge__name {
+  display: block;
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  color: var(--parchment);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 1px 1px 0 var(--edge);
+}
+
+.villager-badge__task {
+  display: block;
+  margin-top: 2px;
+  font-size: 14px;
+  color: var(--parchment-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.villager-badge__dot,
+.dot {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border: 1px solid var(--edge);
+  background: var(--parchment-dim);
+}
+
+.status-idle {
+  background: #7a6642;
+}
+.status-working {
+  background: var(--moss);
+  animation: pulse 1s steps(2) infinite;
+}
+.status-done {
+  background: var(--sky);
+}
+.status-error {
+  background: var(--blood);
+  animation: pulse 0.5s steps(2) infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.22;
+  }
+}
+
+.villager-badge__progress {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 0;
+  height: 3px;
+  background-color: var(--brass);
+  background-image: repeating-linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.3) 0 2px,
+    transparent 2px 4px
+  );
+  transition: width 0.4s steps(8);
+}
+
+/* ==========================================================================
+   Stage
+   ========================================================================== */
+
+.stage {
+  display: flex;
+  gap: 10px;
+  padding: 10px;
+  height: calc(100vh - 132px);
+  min-height: 0;
+}
+
+.stage__frame {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  border: 4px solid var(--edge);
+  background-color: #2e4a24;
+  box-shadow:
+    inset 0 0 0 3px var(--bark-3),
+    inset 0 0 0 5px var(--edge),
+    0 4px 0 var(--edge);
+}
+
+#village {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  cursor: grab;
+  touch-action: none;
+}
+
+#village.is-panning {
+  cursor: grabbing;
+}
+
+.nametags {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Name tags read as little wooden plaques pinned above each villager. */
+.nametag {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  padding: 3px 5px;
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  color: var(--parchment);
+  background-color: rgba(30, 20, 10, 0.92);
+  border: 1px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 150, 0.18);
+  text-shadow: 1px 1px 0 var(--edge);
+}
+
+.nametag--working {
+  color: var(--brass-hi);
+  border-color: var(--brass-dim);
+  background-color: rgba(52, 32, 10, 0.94);
+}
+
+.stage__hint {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 4px 8px;
+  font-size: 14px;
+  pointer-events: none;
+  color: rgba(240, 224, 188, 0.7);
+  background-color: rgba(26, 18, 9, 0.8);
+  border: 1px solid var(--edge);
+}
+
+/* ==========================================================================
+   Activity rail
+   ========================================================================== */
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  width: 320px;
+  flex: 0 0 320px;
+  min-height: 0;
+  overflow: hidden;
+  border: 4px solid var(--edge);
+  background-color: var(--bark);
+  background-image: var(--tex-plank);
+  box-shadow: inset 0 0 0 2px var(--bark-3), 0 4px 0 var(--edge);
+}
+
+.rail__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 10px;
+  border-bottom: 3px solid var(--edge);
+  background-color: var(--bark-3);
+  background-image: var(--tex-wood);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 150, 0.14);
+}
+
+.rail__head--sub {
+  border-top: 3px solid var(--edge);
+}
+
+.rail__head h2 {
+  margin: 0;
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--brass);
+  text-shadow: 1px 1px 0 var(--edge);
+}
+
+.rail__clear {
+  padding: 3px 6px;
+  font-size: 7px;
+  color: var(--parchment-dim);
+  background: none;
+  border: 1px solid var(--line);
+}
+
+.rail__log,
+.rail__listings {
+  list-style: none;
+  margin: 0;
+  padding: 6px 8px;
+  overflow-y: auto;
+  min-height: 0;
+  font-size: 16px;
+}
+
+.rail__log {
+  flex: 1 1 55%;
+  /* The chronicle is written on parchment, not on the boards. */
+  background-color: #2a1e11;
+  background-image: repeating-linear-gradient(
+    0deg,
+    rgba(240, 224, 188, 0.04) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+.rail__listings {
+  flex: 1 1 45%;
+}
+
+.rail__log li {
+  display: flex;
+  gap: 6px;
+  padding: 3px 0;
+  line-height: 1.2;
+  border-bottom: 1px dotted rgba(92, 68, 38, 0.55);
+}
+
+.rail__log time {
+  flex: 0 0 auto;
+  color: #7a6642;
+}
+
+.tone-info {
+  color: var(--parchment-dim);
+}
+.tone-success {
+  color: var(--moss);
+}
+.tone-warn {
+  color: var(--brass);
+}
+.tone-error {
+  color: var(--blood);
+}
+
+/* ---- listing cards: pinned parchment notes ---- */
+.listing-card {
+  position: relative;
+  margin-bottom: 7px;
+  padding: 7px 9px;
+  color: #3a2a14;
+  background-color: var(--parchment-2);
+  background-image: var(--tex-parchment);
+  border: 2px solid var(--edge);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.45);
+}
+
+/* The pin holding the note to the board. */
+.listing-card::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  transform: translateX(-50%);
+  background: var(--blood);
+  box-shadow: 0 0 0 1px var(--edge), inset 1px 1px 0 rgba(255, 255, 255, 0.4);
+}
+
+.listing-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 6px;
+  align-items: baseline;
+}
+
+.listing-card__id {
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  color: #7a4a12;
+}
+
+.listing-card__status {
+  padding: 2px 4px;
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  color: var(--parchment);
+  border: 1px solid var(--edge);
+}
+
+.listing-card__title {
+  margin: 4px 0 0;
+  line-height: 1.15;
+  color: #33240f;
+}
+
+.listing-card__meta {
+  margin: 3px 0 0;
+  font-size: 14px;
+  color: #6b5330;
+}
+
+.listing-card__actions {
+  display: flex;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.listing-card__actions .btn {
+  padding: 5px 6px;
+  font-size: 7px;
+  border-width: 2px;
+  box-shadow: 0 2px 0 var(--edge);
+}
+
+/* ==========================================================================
+   Dialogue — a parchment scroll in a carved frame
+   ========================================================================== */
+
+.dialogue-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: end center;
+  padding: 0 16px 26px;
+  background: rgba(14, 9, 4, 0.78);
+  animation: fade-in 0.1s steps(2);
+}
+
+.dialogue-backdrop[hidden] {
+  display: none;
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.dialogue {
+  position: relative;
+  width: min(780px, 100%);
+  padding: 16px 18px 13px;
+  color: #33240f;
+
+  /* Parchment: base tone plus four hard-stop fibre layers. */
+  background-color: var(--parchment);
+  background-image: var(--tex-parchment);
+
+  /* A four-ring stepped border: dark liner, oak frame, dark edge, brass. */
+  border: 3px solid #6b4a20;
+  box-shadow:
+    0 0 0 3px var(--edge),
+    0 0 0 6px var(--bark-3),
+    0 0 0 9px var(--edge),
+    0 0 0 10px var(--brass-dim),
+    0 10px 0 rgba(0, 0, 0, 0.5);
+  animation: slide-up 0.14s steps(3);
+}
+
+/* Brass studs in the scroll's corners. */
+.dialogue::before,
+.dialogue::after {
+  content: "";
+  position: absolute;
+  top: 7px;
+  width: 7px;
+  height: 7px;
+  background: var(--brass);
+  box-shadow:
+    0 0 0 1px var(--edge),
+    inset 1px 1px 0 var(--brass-hi),
+    0 0 0 1px var(--edge);
+}
+.dialogue::before {
+  left: 7px;
+}
+.dialogue::after {
+  right: 7px;
+}
+
+@keyframes slide-up {
+  from {
+    transform: translateY(22px);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
+.dialogue__close {
+  position: absolute;
+  top: 8px;
+  right: 22px;
+  padding: 4px 6px;
+  font-size: 9px;
+  color: #6b4a20;
+  background: none;
+  border: 2px solid #a8875a;
+}
+
+.dialogue__close:hover {
+  color: var(--blood);
+  border-color: var(--blood);
+}
+
+.dialogue__top {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  padding-bottom: 10px;
+  /* A ruled line, drawn as pixels rather than a border. */
+  border-bottom: 3px double #a8875a;
+}
+
+/* Portrait sits in a stone niche with a carved frame. */
+.portrait {
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 72px;
+  height: 72px;
+  background-color: #2a1e11;
+  background-image: var(--tex-stone);
+  border: 3px solid var(--edge);
+  box-shadow:
+    inset 0 0 0 2px var(--bark-3),
+    inset 0 0 12px rgba(0, 0, 0, 0.55),
+    0 0 0 2px #a8875a;
+}
+
+#portrait-canvas {
+  width: 64px;
+  height: 64px;
+  image-rendering: pixelated;
+}
+
+.dialogue__name {
+  margin: 0;
+  font-family: var(--pixel-font);
+  font-size: 13px;
+  color: #7a4a12;
+  text-shadow: 1px 1px 0 rgba(255, 246, 220, 0.7);
+}
+
+.dialogue__title {
+  margin: 5px 0 0;
+  color: #6b5330;
+}
+
+.dialogue__status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0 0;
+  font-size: 15px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #6b5330;
+}
+
+.dialogue__body {
+  padding: 10px 0 4px;
+  min-height: 64px;
+}
+
+.dialogue__label {
+  margin: 0 0 5px;
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #8a5a1a;
+}
+
+.dialogue__text {
+  margin: 0;
+  min-height: 1.3em;
+  font-size: 22px;
+  line-height: 1.3;
+  color: #2e2110;
+}
+
+.dialogue__text.is-typing::after {
+  content: "▌";
+  color: #8a5a1a;
+  animation: caret 0.5s steps(1) infinite;
+}
+
+@keyframes caret {
+  50% {
+    opacity: 0;
+  }
+}
+
+.dialogue__output {
+  margin-top: 4px;
+  padding-top: 9px;
+  border-top: 3px double #a8875a;
+}
+
+.preview {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  max-height: 176px;
+  padding: 8px;
+  overflow: hidden;
+  background-color: #e0cb9c;
+  background-image: var(--tex-parchment);
+  border: 2px solid #8a6a34;
+  box-shadow: inset 0 0 0 1px rgba(255, 246, 220, 0.5);
+}
+
+.preview__thumb {
+  flex: 0 0 auto;
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  image-rendering: pixelated;
+  border: 2px solid var(--edge);
+  /* Checkerboard behind transparent art, in warm tones. */
+  background-color: #c9b184;
+  background-image:
+    repeating-linear-gradient(45deg, rgba(90, 62, 30, 0.22) 0 6px, transparent 6px 12px),
+    repeating-linear-gradient(-45deg, rgba(90, 62, 30, 0.22) 0 6px, transparent 6px 12px);
+}
+
+.preview__body {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.preview__kind {
+  margin: 0 0 4px;
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  color: var(--moss-deep);
+}
+
+.preview__line {
+  margin: 0 0 3px;
+  line-height: 1.2;
+  word-break: break-word;
+  color: #2e2110;
+}
+
+.preview__muted {
+  color: #6b5330;
+}
+
+.preview__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-top: 5px;
+}
+
+.preview__tag {
+  padding: 1px 5px;
+  font-size: 13px;
+  color: #3a2a14;
+  background-color: #cdb489;
+  border: 1px solid #8a6a34;
+}
+
+.dialogue__actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.dialogue__footer {
+  margin: 9px 0 0;
+  text-align: right;
+  font-size: 15px;
+  color: #8a6a34;
+  animation: caret 1.1s steps(1) infinite;
+}
+
+/* ==========================================================================
+   Toasts
+   ========================================================================== */
+
+.toast-stack {
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  z-index: 80;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.toast {
+  max-width: 340px;
+  padding: 9px 11px;
+  font-family: var(--pixel-font);
+  font-size: 8px;
+  line-height: 1.5;
+  color: var(--parchment);
+  background-color: var(--bark-3);
+  background-image: var(--tex-wood);
+  border: 3px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 150, 0.16), 0 4px 0 var(--edge);
+  animation: slide-up 0.12s steps(3);
+}
+
+.toast--success {
+  color: #d8f0b0;
+  background-color: #3a5220;
+}
+.toast--warn {
+  color: #f7dfa8;
+  background-color: #5c4014;
+}
+.toast--error {
+  color: #f7c4c8;
+  background-color: #5c1c22;
+}
+
+/* ==========================================================================
+   Narrow screens
+   ========================================================================== */
+
+@media (max-width: 900px) {
+  .stage {
+    flex-direction: column;
+    height: auto;
+    overflow-y: auto;
+  }
+
+  .stage__frame {
+    height: 58vh;
+  }
+
+  .rail {
+    width: 100%;
+    flex: 1 1 auto;
+    max-height: 42vh;
+  }
+
+  body {
+    overflow: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+/* ==========================================================================
+   The Bard's video preview
+   ========================================================================== */
+
+.short {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  width: 100%;
+  min-width: 0;
+}
+
+/* A 9:16 player, framed like a stage. */
+.short__media {
+  flex: 0 0 auto;
+  width: 108px;
+  height: 192px;
+  object-fit: cover;
+  background-color: #14100a;
+  border: 3px solid var(--edge);
+  box-shadow: inset 0 0 0 2px var(--bark-3), 0 3px 0 var(--edge);
+  image-rendering: auto; /* real video, not pixel art */
+}
+
+.short__meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.short__title {
+  margin: 0 0 3px;
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  line-height: 1.5;
+  color: #7a4a12;
+}
+
+.short__sub {
+  margin: 0 0 6px;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #6b5330;
+}
+
+.short__hook {
+  margin: 0 0 6px;
+  font-size: 19px;
+  line-height: 1.2;
+  color: #2e2110;
+}
+
+.short__warn {
+  margin: 0 0 6px;
+  padding: 4px 6px;
+  font-size: 15px;
+  color: #7a3a12;
+  background: rgba(200, 110, 40, 0.16);
+  border-left: 3px solid var(--ember);
+}
+
+.short__tags {
+  margin: 0;
+  font-size: 14px;
+  color: #8a6a34;
+  word-break: break-word;
+}
+
+@media (max-width: 620px) {
+  .short {
+    flex-direction: column;
+  }
+
+  .short__media {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 9 / 16;
+    max-height: 320px;
+  }
+}
+
+/* ==========================================================================
+   The ledger — a folded sheet pinned under the treasury counter
+   ========================================================================== */
+
+.treasury {
+  position: relative;
+}
+
+.ledger {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: -3px;
+  right: -3px;
+  z-index: 40;
+  padding: 8px 10px 6px;
+  color: #33240f;
+  background-color: var(--parchment);
+  background-image: var(--tex-parchment);
+  border: 3px solid #6b4a20;
+  box-shadow:
+    0 0 0 3px var(--edge),
+    0 0 0 4px var(--bark-3),
+    0 8px 0 rgba(0, 0, 0, 0.45);
+}
+
+.ledger[hidden] {
+  display: none;
+}
+
+/* The fold: a paler band across the top, like a sheet creased once. */
+.ledger::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 3px;
+  background: repeating-linear-gradient(
+    90deg,
+    rgba(122, 86, 44, 0.35) 0 4px,
+    transparent 4px 8px
+  );
+}
+
+.ledger__head,
+.ledger__row {
+  display: grid;
+  grid-template-columns: 1fr 82px 82px;
+  gap: 6px;
+  align-items: center;
+}
+
+.ledger__head {
+  padding-bottom: 5px;
+  margin-bottom: 4px;
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #8a6a34;
+  border-bottom: 2px solid #a8875a;
+}
+
+.ledger__head span:not(:first-child),
+.ledger__amount {
+  text-align: right;
+}
+
+.ledger__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ledger__row {
+  padding: 5px 0 5px 7px;
+  border-bottom: 1px dotted rgba(122, 86, 44, 0.4);
+  /* A coloured spine per channel, set inline from the API. */
+  border-left: 4px solid var(--accent, #8a6a34);
+}
+
+.ledger__row:last-child {
+  border-bottom: none;
+}
+
+.ledger__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+}
+
+.ledger__icon {
+  font-size: 17px;
+  filter: drop-shadow(1px 1px 0 rgba(0, 0, 0, 0.25));
+}
+
+.ledger__label {
+  display: block;
+  font-size: 18px;
+  line-height: 1.1;
+  color: #2e2110;
+}
+
+.ledger__detail {
+  display: block;
+  font-size: 14px;
+  line-height: 1.2;
+  color: #6b5330;
+}
+
+.ledger__amount {
+  font-family: var(--pixel-font);
+  font-size: 9px;
+  color: #7a4a12;
+  white-space: nowrap;
+}
+
+.ledger__amount--dim {
+  color: #a08050;
+}
+
+.ledger__est {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 1px 3px;
+  font-family: var(--read-font);
+  font-size: 12px;
+  color: #7a3a12;
+  background: rgba(200, 110, 40, 0.2);
+  border: 1px solid rgba(122, 60, 20, 0.4);
+}
+
+.ledger__note {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.2;
+  color: #6b5330;
+}
+
+/* ==========================================================================
+   Sidebar tabs
+   ========================================================================== */
+
+.tabs {
+  display: flex;
+  border-bottom: 3px solid var(--edge);
+  background-color: var(--bark);
+  background-image: var(--tex-wood);
+}
+
+.tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 10px 6px;
+  font-size: 8px;
+  letter-spacing: 0.5px;
+  color: var(--parchment-dim);
+  background: none;
+  border: none;
+  border-right: 2px solid var(--edge);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.35);
+}
+
+.tab:last-child {
+  border-right: none;
+}
+
+.tab:hover {
+  color: var(--parchment);
+  background-color: rgba(224, 165, 63, 0.08);
+}
+
+/* The selected tab lifts out of the strip and loses its bottom shadow. */
+.tab.is-selected {
+  color: var(--brass-hi);
+  background-color: var(--bark-3);
+  box-shadow: inset 0 3px 0 var(--brass-dim);
+}
+
+.tab__badge {
+  min-width: 15px;
+  padding: 2px 3px;
+  font-size: 7px;
+  color: var(--edge);
+  background: var(--brass);
+  border: 1px solid var(--edge);
+}
+
+.tab__badge[hidden] {
+  display: none;
+}
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+.rail__count {
+  padding: 2px 6px;
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  color: var(--parchment-dim);
+  background: var(--bark);
+  border: 1px solid var(--edge);
+}
+
+/* ==========================================================================
+   Bard's Cinema
+   ========================================================================== */
+
+.cinema__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 7px 8px;
+  border-bottom: 2px solid var(--edge);
+  background-color: var(--bark-2);
+  background-image: var(--tex-plank);
+}
+
+.cinema__stat {
+  padding: 3px 6px;
+  font-size: 14px;
+  color: var(--parchment-dim);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--edge);
+}
+
+.cinema__stat b {
+  color: var(--brass-hi);
+}
+
+.rail__shorts {
+  list-style: none;
+  margin: 0;
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.short-card {
+  display: grid;
+  grid-template-columns: 68px 1fr;
+  gap: 8px;
+  margin-bottom: 9px;
+  padding: 7px;
+  background-color: var(--bark-2);
+  background-image: var(--tex-plank);
+  border: 2px solid var(--edge);
+  box-shadow: inset 0 1px 0 rgba(255, 214, 150, 0.1), 0 3px 0 var(--edge);
+}
+
+.short-card--empty {
+  display: block;
+  color: var(--parchment-dim);
+  font-size: 16px;
+  text-align: center;
+  padding: 16px 10px;
+}
+
+.short-card__hint {
+  margin: 6px 0 0;
+  font-size: 15px;
+  color: #7a6642;
+}
+
+/* 9:16, framed like a little screen in the wall. */
+.short-card__media {
+  width: 68px;
+  height: 121px;
+  object-fit: cover;
+  background: #14100a;
+  border: 2px solid var(--edge);
+  box-shadow: inset 0 0 0 1px var(--bark-3);
+  image-rendering: auto;
+}
+
+.short-card__media--pending {
+  display: grid;
+  place-items: center;
+  font-family: var(--pixel-font);
+  font-size: 6px;
+  color: var(--parchment-dim);
+  animation: pulse 1.4s steps(2) infinite;
+}
+
+.short-card__body {
+  min-width: 0;
+}
+
+.short-card__head {
+  display: flex;
+  justify-content: space-between;
+  gap: 5px;
+  align-items: baseline;
+}
+
+.short-card__id {
+  font-family: var(--pixel-font);
+  font-size: 7px;
+  color: var(--brass);
+}
+
+.short-card__status {
+  padding: 2px 4px;
+  font-family: var(--pixel-font);
+  font-size: 5px;
+  color: var(--parchment);
+  background: var(--bark-3);
+  border: 1px solid var(--edge);
+}
+
+.short-card__status[data-status="PUBLISHED"] {
+  background: #3a5220;
+  color: #d8f0b0;
+}
+.short-card__status[data-status="PENDING_APPROVAL"] {
+  background: #5c4014;
+  color: #f7dfa8;
+}
+.short-card__status[data-status="FAILED"],
+.short-card__status[data-status="REJECTED"] {
+  background: #5c1c22;
+  color: #f7c4c8;
+}
+.short-card__status[data-status="RENDERING"] {
+  background: #234a52;
+  color: #b0e0e6;
+}
+
+.short-card__title {
+  margin: 4px 0 0;
+  font-size: 17px;
+  line-height: 1.15;
+  color: var(--parchment);
+}
+
+.short-card__meta {
+  margin: 2px 0 0;
+  font-size: 14px;
+  color: var(--parchment-dim);
+}
+
+.short-card__perf {
+  margin: 3px 0 0;
+  font-size: 14px;
+  color: var(--moss);
+}
+
+.short-card__warn {
+  margin: 3px 0 0;
+  font-size: 13px;
+  color: var(--ember);
+}
+
+/* The live link, once a Short has actually been uploaded. */
+.short-card__live {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.short-card__live a {
+  color: var(--ink-link, #7fc4ff);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+
+.short-card__live a:hover,
+.short-card__live a:focus-visible {
+  color: var(--ink-bright, #ffd24a);
+}
+
+/* Uploaded, but not visible to anyone yet. */
+.short-card__privacy {
+  display: inline-block;
+  margin-left: 4px;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  color: var(--ink-warn, #e0a03c);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ============================ SCOUT'S DEALS ============================ */
+
+.deals__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 8px;
+  margin-bottom: 6px;
+  font-size: 10px;
+  color: var(--ink-dim, #b9a888);
+  border-bottom: 2px solid var(--edge, #4a3c2c);
+}
+
+.rail__deals {
+  list-style: none;
+  margin: 0;
+  padding: 0 4px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.deal-card {
+  padding: 8px;
+  background: var(--panel-deep, #241d15);
+  border: 2px solid var(--edge, #4a3c2c);
+  /* Square corners: the whole UI is pixel art, and a radius reads as a
+     different design language beside the tile textures. */
+  border-radius: 0;
+}
+
+.deal-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 10px;
+  margin-bottom: 4px;
+}
+
+.deal-card__id { color: var(--ink-dim, #b9a888); }
+
+.deal-card__status {
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0 4px;
+  border: 1px solid currentColor;
+  color: var(--ink-dim, #b9a888);
+}
+
+.deal-card__status[data-status='PUBLISHED'] { color: var(--ink-good, #7fbf6a); }
+.deal-card__status[data-status='APPROVED'] { color: var(--ink-good, #7fbf6a); }
+.deal-card__status[data-status='REJECTED'] { color: var(--ink-bad, #c96a5a); }
+.deal-card__status[data-status='PENDING_APPROVAL'] { color: var(--ink-warn, #e0a03c); }
+
+.deal-card__hook {
+  margin: 0 0 4px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ink-bright, #ffd24a);
+}
+
+.deal-card__product {
+  margin: 0 0 2px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ink, #efe3c8);
+}
+
+.deal-card__meta,
+.deal-card__cons,
+.deal-card__perf {
+  margin: 0 0 2px;
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--ink-dim, #b9a888);
+}
+
+/* The trade-off is the reason the card is worth reading; give it its own
+   colour so it is not skimmed past as more marketing copy. */
+.deal-card__cons { color: var(--ink-warn, #e0a03c); }
+.deal-card__perf { color: var(--ink-good, #7fbf6a); }
+
+.deal-card__link { margin: 4px 0 0; font-size: 10px; }
+
+.deal-card__link a {
+  color: var(--ink-link, #7fc4ff);
+  text-decoration: none;
+  border-bottom: 1px dotted currentColor;
+}
+
+.deal-card__link a:hover,
+.deal-card__link a:focus-visible { color: var(--ink-bright, #ffd24a); }
+
+.deal-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+}
+
+
+
+.short-card__actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.short-card__actions .btn {
+  padding: 5px 6px;
+  font-size: 7px;
+  border-width: 2px;
+  box-shadow: 0 2px 0 var(--edge);
+}
+
+/* ==========================================================================
+   Simulated money — visible, but never dressed up as earnings
+   ========================================================================== */
+
+/* A channel with only dry-run activity greys out and shows a dash. */
+.spark--sim {
+  opacity: 0.5;
+}
+
+.spark--sim span {
+  color: var(--parchment-dim);
+}
+
+/* The lifetime column's "sim" tag: deliberately dull, never brass. */
+.ledger__sim {
+  display: block;
+  margin-top: 2px;
+  font-family: var(--read-font);
+  font-size: 13px;
+  font-weight: normal;
+  color: #8a7a5a;
+}
+
+/* A zero treasury is stated plainly rather than glowing like a jackpot. */
+#treasury-amount.is-zero {
+  color: var(--parchment-dim);
+  text-shadow: 2px 2px 0 var(--edge);
+}

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.env
+*.db
+storage/*
+!storage/.gitkeep
+
+# OAuth client secret and the token cache it mints. Both are live credentials
+# for a real YouTube account: the secret identifies the app, the token grants
+# upload access to the channel. Neither ever belongs in version control.
+client_secret*.json
+storage/youtube_token.json
+*token*.json
