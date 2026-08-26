@@ -24,7 +24,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, AsyncIterator
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import (
+    BackgroundTasks,
+    FastAPI,
+    Header,
+    HTTPException,
+    Request,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from loguru import logger
@@ -381,6 +389,137 @@ async def api_agent(agent_id: str) -> JSONResponse:
     if villager is None or agent is None:
         raise HTTPException(status_code=404, detail=f"No villager {agent_id!r}")
     return JSONResponse({"villager": villager.to_dict(), "agent": agent.to_dict()})
+
+
+#: One publish at a time. A cron service that retries on timeout, or two
+#: overlapping schedules, would otherwise run the pipeline twice and post the
+#: same edition to the channel twice.
+_cron_lock = asyncio.Lock()
+
+
+def _cron_authorised(token: str | None, header: str | None) -> bool:
+    """Whether a cron request may proceed.
+
+    With no CRON_SECRET configured the route is open, which is what makes it
+    usable from a bare cron URL — and is also why the check exists at all. This
+    route publishes to a public channel with no human in the loop and answers
+    GET, so a crawler or a link preview can fire it.
+    """
+    secret = get_settings().cron_secret.strip()
+    if not secret:
+        return True
+
+    import hmac  # noqa: PLC0415
+
+    supplied = (token or header or "").strip()
+    # Constant time: this is a bearer secret, and a timing oracle on it is a
+    # slow but real way to guess it.
+    return bool(supplied) and hmac.compare_digest(supplied, secret)
+
+
+@app.get("/api/cron/publish")
+async def api_cron_publish(
+    token: str | None = None,
+    hours: int = 12,
+    x_cron_token: str | None = Header(default=None),
+) -> JSONResponse:
+    """Run the full pipeline and publish straight to the channel.
+
+    Scout gathers, Scribe writes, and the edition goes out — no approval card,
+    no button. Intended for a cron service hitting one URL each morning.
+
+    Synchronous on purpose: the response claims the newsletter was published,
+    so it must not return until that is true. A full run takes roughly 30-60
+    seconds, so give the caller a timeout above that.
+    """
+    if not _cron_authorised(token, x_cron_token):
+        raise HTTPException(status_code=401, detail="Invalid or missing cron token")
+
+    if _cron_lock.locked():
+        # 409 rather than queueing: a cron retry should be told it was already
+        # running, not silently produce a second edition.
+        raise HTTPException(
+            status_code=409, detail="A publish run is already in progress"
+        )
+
+    async with _cron_lock:
+        settings = get_settings()
+
+        if not settings.channel_configured:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "TELEGRAM_CHANNEL_ID is not set. Add it to .env "
+                    "(e.g. TELEGRAM_CHANNEL_ID=@TheMorningLedger) and make the "
+                    "bot an administrator of that channel."
+                ),
+            )
+
+        from core.database import EditionStatus, update_edition_status  # noqa: PLC0415
+        from village.morning_ledger import MorningLedger  # noqa: PLC0415
+        from village.night_scribe import NightScribe  # noqa: PLC0415
+        from village.town_crier import TownCrier  # noqa: PLC0415
+
+        events.log("Cron: the Morning Ledger run has started.", "info")
+
+        # ---- 1. the Scout gathers -------------------------------------------
+        try:
+            scan = await NightScribe(settings).scan()
+        except Exception as exc:  # noqa: BLE001 - a bad scan need not stop the run
+            logger.warning("Cron scan failed ({}); building from what is held", exc)
+            scan = None
+
+        # ---- 2. the Scribe writes -------------------------------------------
+        ledger = MorningLedger(settings)
+        try:
+            row = await ledger.publish_draft(hours=hours, dispatch=False)
+        except Exception as exc:
+            logger.exception("Cron build failed")
+            raise HTTPException(
+                status_code=500, detail=f"Could not build the edition: {exc}"
+            ) from exc
+        finally:
+            await ledger.aclose()
+
+        # ---- 3. straight past the approval gate ------------------------------
+        # The row still moves through APPROVED rather than jumping to PUBLISHED:
+        # the transition table is what keeps every other path honest, and a row
+        # that skipped a state is one no other code can reason about.
+        update_edition_status(
+            row.id, EditionStatus.APPROVED, reason="Auto-approved by the cron route."
+        )
+
+        sent, detail = await TownCrier(settings).broadcast_edition(row.id)
+        if not sent:
+            # Back to DRAFT, not PUBLISHED: nothing was published, and the row
+            # must not claim otherwise.
+            update_edition_status(
+                row.id, EditionStatus.DRAFT, reason=f"Channel publish failed: {detail}"
+            )
+            raise HTTPException(
+                status_code=502, detail=f"Telegram refused the post: {detail}"
+            )
+
+        update_edition_status(
+            row.id, EditionStatus.PUBLISHED, reason=f"Published by cron — {detail}"
+        )
+        events.log(f"Cron published: {row.title}", "success")
+
+        logger.success("Cron publish complete: edition {} — {}", row.id, detail)
+        return JSONResponse(
+            {
+                "status": "success",
+                "message": "Newsletter generated and published successfully",
+                # Everything below is additive. The two fields above are the
+                # contract; these are what make a failed morning debuggable.
+                "edition_id": row.id,
+                "title": row.title,
+                "publish_date": str(row.publish_date),
+                "stories_scanned": getattr(scan, "stored", 0) if scan else 0,
+                "channel": settings.telegram_channel_id.strip(),
+                "detail": detail,
+            }
+        )
 
 
 @app.get("/api/deals")

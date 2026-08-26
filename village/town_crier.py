@@ -831,6 +831,74 @@ class TownCrier:
             events.toast(f"The Morning Ledger went out: {edition.title}", "success")
         return sent
 
+    async def broadcast_edition(self, edition_id: int) -> tuple[bool, str]:
+        """Post a finished edition to the public channel.
+
+        Separate from :meth:`publish_edition`, which sends to the operator's
+        private chat as a monospaced block. A channel post is the published
+        artefact, so the markdown is rendered into Telegram's HTML subset and
+        split on paragraph boundaries.
+
+        :returns: ``(sent, detail)``.
+        """
+        from core.telegram_format import (  # noqa: PLC0415
+            markdown_to_telegram_html, split_for_telegram,
+        )
+
+        if not self.settings.channel_configured:
+            return False, (
+                "TELEGRAM_CHANNEL_ID is not set (and TELEGRAM_BOT_TOKEN must be too)"
+            )
+
+        edition = get_edition(edition_id)
+        if edition is None:
+            return False, f"no edition {edition_id}"
+
+        body = markdown_to_telegram_html(edition.full_markdown)
+        chunks = split_for_telegram(body)
+        channel = self.settings.telegram_channel_id.strip()
+
+        bot = ApplicationBuilder().token(self.settings.telegram_bot_token).build().bot
+        try:
+            async with bot:
+                for index, chunk in enumerate(chunks, start=1):
+                    tail = (
+                        f"\n\n<i>({index}/{len(chunks)})</i>" if len(chunks) > 1 else ""
+                    )
+                    await bot.send_message(
+                        chat_id=channel,
+                        text=chunk + tail,
+                        parse_mode=ParseMode.HTML,
+                        disable_web_page_preview=True,
+                    )
+        except TelegramError as exc:
+            detail = self._explain_channel(exc, channel)
+            logger.error("Channel publish failed: {}", detail)
+            return False, detail
+
+        logger.success(
+            "Edition {} published to {} in {} message(s)", edition_id, channel, len(chunks)
+        )
+        return True, f"published to {channel} in {len(chunks)} message(s)"
+
+    @staticmethod
+    def _explain_channel(exc: Exception, channel: str) -> str:
+        """Turn Telegram's terse channel errors into the fix."""
+        text = str(exc).lower()
+        if "chat not found" in text:
+            return (
+                f"Telegram cannot find {channel}. Check the @name, and note the "
+                "bot must be a MEMBER of the channel before it can post."
+            )
+        if "not enough rights" in text or "administrator" in text:
+            return (
+                f"The bot is in {channel} but cannot post. Make it an "
+                "administrator with 'Post Messages' enabled."
+            )
+        if "can't parse entities" in text:
+            return f"Telegram rejected the HTML: {exc}"
+        return str(exc)
+
     async def announce(self, text: str) -> bool:
         """Send a plain message to the operator, outside any approval flow.
 

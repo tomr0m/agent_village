@@ -277,6 +277,19 @@ class Settings(BaseSettings):
     #: keep scene prompts entirely on machines you control.
     pollinations_enabled: bool = Field(default=True)
 
+    #: Public channel the finished newsletter is posted to, e.g. "@TheMorningLedger".
+    #: Distinct from TELEGRAM_CHAT_ID, which is the operator's private approval
+    #: chat — one is where drafts are argued about, the other is the audience.
+    telegram_channel_id: str = Field(default="")
+
+    #: Shared secret for /api/cron/publish. When set, a request must carry it
+    #: as ?token= or an X-Cron-Token header.
+    #:
+    #: Strongly recommended: that route publishes to a public channel with no
+    #: human in the loop, and it answers GET — which means a crawler, a link
+    #: preview or a browser prefetch can fire it.
+    cron_secret: str = Field(default="")
+
     # ---- The Morning Ledger -------------------------------------------------
     #: RSS feeds the Night Scribe reads, comma separated.
     #:
@@ -620,6 +633,11 @@ class Settings(BaseSettings):
         if not base.startswith(("http://", "https://")):
             return ""
         return f"{base}/{path.lstrip('/')}"
+
+    @property
+    def channel_configured(self) -> bool:
+        """Whether a broadcast channel is set up."""
+        return bool(self.telegram_bot_token.strip() and self.telegram_channel_id.strip())
 
     @property
     def crypto_feed_list(self) -> tuple[str, ...]:

@@ -786,7 +786,15 @@ class EditionStatus(str, Enum):
 _EDITION_TRANSITIONS: dict[EditionStatus, set[EditionStatus]] = {
     # APPROVED means "scheduled"; PUBLISHED means the 08:00 send actually went.
     EditionStatus.DRAFT: {EditionStatus.APPROVED, EditionStatus.REJECTED},
-    EditionStatus.APPROVED: {EditionStatus.PUBLISHED, EditionStatus.REJECTED},
+    # APPROVED -> DRAFT is un-approving, and it has to be possible: when a
+    # publish attempt fails the edition is still good and the channel is not,
+    # so it goes back to the queue. Leaving it APPROVED would mean the 08:00
+    # delivery loop picks up and sends an edition that just failed to send.
+    EditionStatus.APPROVED: {
+        EditionStatus.PUBLISHED,
+        EditionStatus.REJECTED,
+        EditionStatus.DRAFT,
+    },
     EditionStatus.PUBLISHED: set(),
     EditionStatus.REJECTED: {EditionStatus.DRAFT},
 }
